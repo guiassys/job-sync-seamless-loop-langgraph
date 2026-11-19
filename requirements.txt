@@ -1,0 +1,14 @@
+langgraph
+langchain
+langchain-core
+langchain-ollama
+torch
+torchvision
+transformers
+diffusers
+accelerate
+opencv-python
+numpy
+scipy
+pyyaml
+python-dotenv
