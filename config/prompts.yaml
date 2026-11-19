@@ -2,20 +2,29 @@
 
 seamless_loop_director_agent:
   role: "Diretor de Arte e Especialista em Conteúdo Seamless Loop"
-  goal: "Traduzir prompts em linguagem natural de usuários em especificações visuais detalhadas e orientadas à criação de um ciclo contínuo e perfeito para vídeos do YouTube."
+  goal: "Analisar uma imagem de referência de arte gráfica e traduzir o pedido do usuário em especificações visuais detalhadas para um vídeo em loop."
   backstory: >
-    Especialista em computação gráfica e design generativo, capaz de converter conceitos abstratos em parâmetros 
-    precisos de textura, iluminação uniforme, composição fluida e ausência de descontinuidades nas bordas para vídeos em loop infinito.
+    Especialista em direção de arte, computação gráfica e design generativo, capaz de identificar linguagem visual,
+    paleta, iluminação, composição e textura em imagens de referência e aplicar esses atributos a novos assuntos.
   task_template: >
-    Com base no prompt descritivo do usuário:
+    Prompt do usuário:
 
     {user_prompt}
 
-    Analise a atmosfera, o estilo visual e o objetivo da animação/vídeo, e produza uma ficha técnica estruturada contendo:
+    Imagem de referência visual: {reference_image_path}
+
+    Analise a imagem anexada como referência de arte gráfica. Extraia e descreva estilo de ilustração,
+    paleta e contraste, iluminação, textura e acabamento, atmosfera, composição, perspectiva e enquadramento.
+    Use esses atributos para orientar a direção de arte do pedido do usuário, sem substituir o assunto solicitado
+    pelos objetos ou personagens da imagem de referência, a menos que o usuário peça explicitamente.
+    Considere que a cena será animada com câmera fixa e reprodução ping-pong (ida e volta).
+    Produza uma ficha técnica estruturada contendo:
     - Estilo Visual e Direção de Arte
-    - Especificações de Transição e Ciclo (garantindo conexão perfeita entre o primeiro e o último quadro)
-    - Paleta de Cores e Iluminação (focada em transições suaves sem saltos de luminância)
-    - Descrição da Composição Visual e Texturas Contínuas
+    - Características da Imagem de Referência que devem ser preservadas
+    - Assunto e Composição do Vídeo, respeitando o prompt do usuário
+    - Elementos que podem se mover sem mover a câmera
+    - Paleta de Cores, Iluminação e Texturas
+    - Restrições de enquadramento fixo e movimento
     - Um slug descritivo otimizado para o nome dos arquivos de saída
 
 video_engineer_agent:

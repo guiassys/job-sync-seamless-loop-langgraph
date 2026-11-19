@@ -1,6 +1,6 @@
 # 🤖 Job Sync Seamless Loop LangGraph (LangGraph + Ollama Local)
 
-Pipeline de Inteligência Artificial autônoma construída com **LangGraph** para criar vídeos curtos em *Seamless Loop* (loop infinito e fluido) a partir de prompts descritivos em linguagem natural, seguindo uma arquitetura modular baseada em grafos de estados. O sistema opera 100% local utilizando modelos executados via **Ollama** (`qwen3-coder:30b`) e o modelo de geração de vídeo HuggingFace / Diffusers (`stabilityai/stable-video-diffusion-img2vid-xt`) em ambiente acelerado por GPU.
+Pipeline local de geração de vídeos curtos a partir de prompts em linguagem natural. O fluxo usa **Ollama** para interpretar o pedido e analisar uma imagem de referência, e **Diffusers** para criar a imagem-base e animá-la com Stable Video Diffusion. A geração pode usar CUDA quando disponível.
 
 ---
 
@@ -8,27 +8,13 @@ Pipeline de Inteligência Artificial autônoma construída com **LangGraph** par
 
 O projeto utiliza um pipeline sequencial controlado por um Grafo de Estados (*StateGraph*), composto por quatro nós especializados cujos papéis e diretrizes são desacoplados no arquivo de configuração `config/prompts.yaml`:
 
-1. **Diretor de Arte e Especialista em Conteúdo Seamless Loop (`seamless_loop_director_agent`):**
-- Analisa o prompt descritivo inserido pelo usuário (ex: *"Crie uma imagem em estilo Seamless Loop..."*).
-- Traduz conceitos abstratos em parâmetros visuais precisos (direção de arte, consistência de bordas, paleta de cores e iluminação uniforme).
-- Gera um slug descritivo e define as especificações de transição e ciclo para o vídeo.
+1. **Diretor de Arte (`seamless_loop_director_agent`):** analisa o pedido do usuário e a imagem `input/lofi-picture-style.png` com um modelo multimodal do Ollama. A ficha técnica descreve estilo, paleta, iluminação, textura, composição e atmosfera da referência, aplicando essa linguagem visual sem substituir o assunto solicitado. Também propõe um slug para os arquivos de saída.
 
-2. **Engenheiro de Vídeo Sênior e Otimizador de Renderização (`video_engineer_agent`):**
-- Gerencia a exclusividade de recursos de hardware para evitar estouros de VRAM (*CUDA Out of Memory*) entre o Ollama e a GPU.
-- Converte a ficha técnica em um prompt visual e gera um frame inicial com Stable Diffusion (`IMAGE_MODEL_ID`).
-- Usa esse frame como entrada do modelo image-to-video `stabilityai/stable-video-diffusion-img2vid-xt`, em vez de um frame sintético quase preto.
-- Instrui o SVD a manter a câmera fixa e usa `motion_bucket_id=1` e `noise_aug_strength=0` para reduzir movimento global.
-- Estabiliza deslocamentos residuais da câmera por fluxo óptico e concatena os frames em ordem normal e reversa (ping-pong), sem duplicar os quadros dos extremos.
-- Exporta para `.mp4` e rejeita saídas quase pretas ou que não possam ser decodificadas.
+2. **Engenheiro de Vídeo (`video_engineer_agent`):** transforma a ficha em um prompt visual em inglês, gera a imagem-base com Stable Diffusion (`IMAGE_MODEL_ID`) e a anima com Stable Video Diffusion (`VIDEO_MODEL_ID`). A configuração de baixa movimentação e a estabilização por fluxo óptico reduzem o movimento global de câmera, mas não garantem que todo movimento de câmera gerado pelo modelo seja removido. Os frames estabilizados são exportados na ordem normal e depois reversa (ping-pong), sem repetir os extremos. Saídas não decodificáveis ou quase pretas são rejeitadas.
 
-3. **Validador de Seamless Loop (`validator_agent`):**
-- Verifica a paridade e a suavidade da junção entre o início e o fim do vídeo.
-- Lê o MP4 gerado e informa resolução, frames, brilho, contraste e diferença real entre o primeiro e o último frame; não declara sucesso com métricas simuladas.
-- No loop ping-pong, a reprodução reversa retorna ao frame inicial e permite que a animação recomece sem corte de câmera.
+3. **Validador (`validator_agent`):** no fluxo original, lê o MP4 e informa número de frames, resolução, FPS, brilho, contraste e diferença entre o primeiro e o último frame. No fluxo rápido, a exportação ainda verifica que o arquivo é decodificável e contém conteúdo visual.
 
-4. **Editor Técnico e Documentador (`editor_agent`):**
-- Recebe os metadados consolidados da execução, o prompt original, os parâmetros visuais, as métricas de validação e o caminho do arquivo de vídeo.
-- Valida e compila a documentação estruturada em Markdown, salvando o relatório final vinculado ao arquivo de vídeo.
+4. **Editor (`editor_agent`):** produz um relatório Markdown associado ao vídeo gerado, com o prompt, a ficha visual, as métricas disponíveis e o caminho do MP4.
 
 ---
 
@@ -36,8 +22,8 @@ O projeto utiliza um pipeline sequencial controlado por um Grafo de Estados (*St
 
 O projeto suporta diferentes fluxos de geração através do padrão Strategy:
 
-- **Fluxo Original (Pipeline Completo com Validação de Loop)**: Pipeline completo incluindo a etapa de validação métrica da transição.
-- **Fluxo Rápido (Geração Direta)**: Versão simplificada que ignora a validação intermediária para renderização mais rápida.
+- **Original:** planejamento visual, geração, métricas detalhadas do MP4 e relatório.
+- **Rápido:** planejamento visual, geração e relatório; omite as métricas detalhadas do nó validador.
 
 Ao executar o projeto, você poderá selecionar qual fluxo deseja utilizar.
 
@@ -49,16 +35,19 @@ Ao executar o projeto, você poderá selecionar qual fluxo deseja utilizar.
 job-sync-seamless-loop-langgraph/
 ├── config/
 │   └── prompts.yaml      # Configuração unificada de papéis, goals, backstories e templates
-├── data/                 # Diretório opcional para dados complementares
-├── output/               # Diretório onde os arquivos de vídeo (.mp4) e relatórios (.md) são salvos com timestamp e slug
+├── input/
+│   └── lofi-picture-style.png # Imagem de referência visual do agente diretor
+├── output/               # Vídeos (.mp4) e relatórios (.md) com timestamp e slug
 ├── src/
 │   ├── __init__.py
-│   ├── state.py          # Contrato de dados compartilhado (TypedDict) que trafega no grafo
-│   ├── tools.py          # Ferramenta de síntese de vídeo (SVD) e gestão de VRAM da GPU
-│   ├── nodes.py          # Funções de cada etapa executando via ChatOllama
-│   ├── graph.py          # Montagem, interligação das arestas e compilação do StateGraph
-│   └── flow_strategy.py  # Implementação do padrão Strategy para diferentes fluxos de geração
-├── .env                  # Variáveis de ambiente (URL do Ollama, modelo de vídeo e diretório)
+│   ├── state.py          # Estado compartilhado do fluxo
+│   ├── reference_image.py # Codificação da imagem para entrada multimodal do Ollama
+│   ├── tools.py          # Geração, estabilização, ping-pong, exportação e inspeção do vídeo
+│   ├── nodes.py          # Nós do pipeline e chamadas ao Ollama
+│   ├── graph.py          # Grafo LangGraph
+│   └── flow_strategy.py  # Fluxos Original e Rápido
+├── tests/                # Testes de imagem de referência e processamento de vídeo
+├── .env                  # Configuração local (não versionar credenciais)
 ├── README.md             # Documentação do projeto
 ├── .gitignore            # Contrato de arquivos a serem ignorados pelo Git
 ├── main.py               # Ponto de entrada leve (executa o fluxo e persiste os arquivos)
@@ -71,8 +60,9 @@ job-sync-seamless-loop-langgraph/
 
 - **Python 3.10+** (Ambiente WSL / Ubuntu recomendado)
 - **OpenCV / FFmpeg** instalados no sistema operacional para manipulação de vídeo (`sudo apt install ffmpeg libgl1-mesa-glx`)
-- **Ollama** rodando localmente (ex: via Docker) com o modelo configurado (`qwen3-coder:30b` na porta `11434`).
-- **Placa de Vídeo NVIDIA** com suporte CUDA para inferência dos modelos locais de linguagem e difusão de vídeo.
+- **Ollama** instalado e disponível em `http://localhost:11434` (ou no endereço configurado em `OLLAMA_BASE_URL`).
+- Modelo textual no Ollama (padrão do projeto: `qwen3-coder:30b`) e modelo multimodal capaz de receber imagens (padrão: `qwen2.5vl:7b`).
+- **GPU NVIDIA com CUDA** recomendada para geração prática com os modelos de difusão. A execução em CPU pode ser muito lenta e consumir bastante memória.
 
 ---
 
@@ -80,7 +70,7 @@ job-sync-seamless-loop-langgraph/
 
 Abra o seu terminal no WSL/Ubuntu e siga os passos abaixo:
 
-1. **Instalar dependências de sistema (FFmpeg e dependências gráficas)**
+1. **Instalar dependências de sistema**
    ```bash
    sudo apt update && sudo apt install -y ffmpeg libgl1-mesa-glx
    ```
@@ -108,8 +98,14 @@ Abra o seu terminal no WSL/Ubuntu e siga os passos abaixo:
 ## ▶️ Como Executar o Projeto
 
 Certifique-se de que o seu container do Ollama está rodando e acessível na porta `11434`.
+Baixe os modelos do Ollama se ainda não estiverem disponíveis:
 
-Com o ambiente virtual ativado (`source venv/bin/activate`), basta executar o script principal:
+```bash
+ollama pull qwen2.5vl:7b
+ollama pull qwen3-coder:30b
+```
+
+Com o ambiente virtual ativado (`source venv/bin/activate`), execute:
 
 ```bash
 python main.py
@@ -119,4 +115,26 @@ O pipeline será iniciado, e você poderá escolher entre os fluxos disponíveis
 - 1. Original (Pipeline Completo com Validação de Loop)
 - 2. Rápido (Geração Direta)
 
-Na primeira execução, o Diffusers baixa o modelo text-to-image configurado em `IMAGE_MODEL_ID` (padrão: `stable-diffusion-v1-5/stable-diffusion-v1-5`), além do modelo de vídeo. É possível selecionar outros IDs de modelos compatíveis por `IMAGE_MODEL_ID` e `VIDEO_MODEL_ID` no ambiente. Os arquivos gerados serão salvos automaticamente no diretório `output/` utilizando um prefixo unificado com timestamp e slug de estilo (ex: `20261118_183000_seamless-loop.mp4` e `20261118_183000_seamless-loop.md`).
+Na primeira execução, o Diffusers baixa os modelos de imagem e vídeo, que ocupam espaço em disco e podem demandar bastante VRAM. A imagem de referência precisa existir antes de executar o pipeline.
+
+### Configuração por variáveis de ambiente
+
+| Variável | Padrão | Uso |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Endereço do servidor Ollama |
+| `OLLAMA_MODEL` | `qwen3-coder:30b` | Modelo textual usado pelo engenheiro/editor |
+| `OLLAMA_VISION_MODEL` | `qwen2.5vl:7b` | Modelo multimodal usado pelo diretor |
+| `REFERENCE_IMAGE_PATH` | `input/lofi-picture-style.png` | Imagem de referência visual |
+| `IMAGE_MODEL_ID` | `stable-diffusion-v1-5/stable-diffusion-v1-5` | Modelo text-to-image |
+| `VIDEO_MODEL_ID` | `stabilityai/stable-video-diffusion-img2vid-xt` | Modelo image-to-video |
+| `OUTPUT_DIR` | `output/` | Diretório dos relatórios Markdown |
+
+O caminho relativo configurado em `REFERENCE_IMAGE_PATH` é resolvido a partir da raiz do projeto. O vídeo é salvo no diretório `output/` do projeto. Os nomes de vídeo e relatório compartilham timestamp e slug, por exemplo `20261118_183000_seamless-loop.mp4` e `20261118_183000_seamless-loop.md`.
+
+O MP4 ping-pong contém o clipe estabilizado seguido dos mesmos frames em ordem reversa. Isso cria uma ida e volta contínua, mas não equivale a uma animação cíclica unidirecional; eventos irreversíveis da cena também serão reproduzidos ao contrário.
+
+Para executar os testes de processamento:
+
+```bash
+python -m unittest discover -s tests -v
+```

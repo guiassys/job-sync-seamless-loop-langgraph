@@ -15,7 +15,7 @@ OUTPUT_DIR = os.getenv(
 )
 DEFAULT_PROMPT = os.getenv(
     "USER_PROMPT",
-    "Seamless Loop com gatinho dormindo e respirando profundamente deitado em uma cama de um quarto aconchegante, com composição perfeitamente contínua, na qual o primeiro e o último quadro se conectam sem qualquer interrupção visual, criando um ciclo infinito e fluido de respiração.",
+    "Seamless Loop no estilo de animação lo-fi aconchegante inspirado na estética do canal Lofi Girl, mostrando uma jovem estudante concentrada escrevendo em um caderno ao lado de uma caneca fumegante e um gato dormindo perto da janela, enquanto chuva suave cai lá fora sob luzes quentes de abajur e tons pastel suaves, com composição perfeitamente contínua em que o primeiro e o último quadro se conectam sem qualquer interrupção visual, criando um ciclo infinito, calmo e fluido de movimentos sutis como fumaça subindo, chuva caindo, páginas virando e o gato respirando.",
 )
 
 

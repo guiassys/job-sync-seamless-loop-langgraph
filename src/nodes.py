@@ -2,17 +2,29 @@
 
 import os
 import yaml
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import VideoState
+from src.reference_image import encode_reference_image
 from src.tools import generate_video_tool, inspect_video
 
 # Carrega variáveis de ambiente do arquivo .env (caso existam)
 load_dotenv()
 
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3-coder:30b")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:7b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+REFERENCE_IMAGE_PATH = Path(
+    os.getenv(
+        "REFERENCE_IMAGE_PATH",
+        str(PROJECT_ROOT / "input" / "lofi-picture-style.png"),
+    )
+).expanduser()
+if not REFERENCE_IMAGE_PATH.is_absolute():
+    REFERENCE_IMAGE_PATH = PROJECT_ROOT / REFERENCE_IMAGE_PATH
 
 # Carrega as configurações de prompts e tarefas do YAML
 CONFIG_PATH = os.path.abspath(
@@ -25,6 +37,11 @@ with open(CONFIG_PATH, "r", encoding="utf-8") as f:
 # Instancia o modelo local via Ollama
 llm = ChatOllama(
     model=OLLAMA_MODEL,
+    base_url=OLLAMA_BASE_URL,
+    temperature=0.2,
+)
+vision_llm = ChatOllama(
+    model=OLLAMA_VISION_MODEL,
     base_url=OLLAMA_BASE_URL,
     temperature=0.2,
 )
@@ -41,20 +58,34 @@ def _build_system_prompt(agent_key: str) -> str:
 
 
 def director_node(state: VideoState) -> dict:
-    """Nó 1: Diretor de Arte (Traduz o prompt do usuário em ficha técnica visual e slug)."""
+    """Nó 1: Analisa a imagem de referência e cria a ficha técnica visual."""
     print("\n--- [1/4] EXECUTANDO: Diretor de Arte e Especialista em Conteúdo Seamless Loop ---")
+    if not REFERENCE_IMAGE_PATH.is_file():
+        raise FileNotFoundError(
+            f"Imagem de referência do diretor não encontrada: {REFERENCE_IMAGE_PATH}"
+        )
 
     system_prompt = _build_system_prompt("seamless_loop_director_agent")
     user_prompt = PROMPTS["seamless_loop_director_agent"]["task_template"].format(
-        user_prompt=state["user_prompt"]
+        user_prompt=state["user_prompt"],
+        reference_image_path=REFERENCE_IMAGE_PATH,
     )
 
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": user_prompt},
+                {
+                    "type": "image",
+                    "base64": encode_reference_image(REFERENCE_IMAGE_PATH),
+                    "mime_type": "image/jpeg",
+                },
+            ]
+        ),
     ]
 
-    response = llm.invoke(messages)
+    response = vision_llm.invoke(messages)
     visual_specification_output = response.content
 
     return {"visual_specification": visual_specification_output}
